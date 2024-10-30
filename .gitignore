@@ -73,3 +73,5 @@ input.map.txt
 output.summary.txt
 
 .DS_Store
+
+pyproject.toml

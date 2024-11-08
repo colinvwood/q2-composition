@@ -12,7 +12,7 @@ import numpy as np
 
 from qiime2.plugin import (Int, Float, Bool, Str, List,
                            Choices, Citations, Plugin, Metadata,
-                           MetadataColumn, Categorical, Range)
+                           MetadataColumn, Categorical, Range, Threads)
 from q2_types.feature_table import FeatureTable, Frequency, Composition
 from q2_types.feature_data import FeatureData
 
@@ -152,6 +152,105 @@ plugin.methods.register_function(
         'ancombc_multi_formula_with_reference_levels': (
             ex.ancombc_multi_formula_with_reference_levels)
     }
+)
+
+plugin.methods.register_function(
+    function=q2_composition.ancombc2,
+    inputs={
+        'table': FeatureTable[Frequency],
+    },
+    parameters={
+        'metadata': Metadata,
+        'fixed_effects_formula': Str,
+        'random_effects_formula': Str,
+        'reference_levels': List[Str],
+        'p_adjust_method': Str,
+        'prevalence_cutoff': Float % Range(
+            0.0, 1.0, inclusive_start=True, inclusive_end=True
+        ),
+        'group': Str,
+        'structural_zeros': Bool,
+        'alpha': Float % Range(
+            0.0, 1.0, inclusive_start=False, inclusive_end=True
+        ),
+        'num_processes': Threads,
+        'global_test': Bool,
+        'pairwise_test': Bool,
+        'dunnetts_test': Bool,
+        'trend_test': Bool
+    },
+    outputs=[
+        ('statistics', FeatureData[DifferentialAbundance])
+    ],
+    input_descriptions={
+        'table': 'Your feature table.'
+    },
+    parameter_descriptions={
+        'metadata': 'Your per-sample metadata.',
+        'fixed_effects_formula': (
+            'A formula that expresses how the feature absolute abundances in '
+            'the feature table depend on the fixed effects of variables '
+            '(columns) in the metadata. Do not include the dependent variable. '
+            'Reference the `formula` function in the `stats` R package for a '
+            'specification of valid formulae.'
+        ),
+        'random_effects_formula': (
+            'A formula that expresses how the feature absolute abundances in '
+            'the feature table depend on the random effects of variables '
+            '(columns) in the metadata. Do not include the dependent variable. '
+            'Reference the `lmerTest` R package for a specification of valid '
+            'formulae.'
+        ),
+        'reference_levels': (
+            'Specify reference levels for one or more categorical metadata '
+            'variables (columns). The method of specification is '
+            '"column_name::column_value". E.g. "sex::female" sets the "female" '
+            'category of the "sex" variable to be the reference level. '
+            'Separate multiple specifications by spaces.'
+        ),
+        'p_adjust_method': (
+            'The method used to adjust p-values. Choose from "holm", '
+            '"hochberg", "hommel", "bonferroni",  "BH", "BY", "fdr", "none". '
+            'See the `p.adjust` method in the `stats` R package for '
+            'explanations of each option.'
+        ),
+        'prevalence_cutoff': (
+            'Features with prevalences less than this threshold will be '
+            'excluded from the analysis.'
+        ),
+        'group': (
+            'The name of the group variable in the metadata. The group '
+            'variable must be categorical and is required to detect structural '
+            'zeros and perform multi-group comparisons. The multi-group '
+            'comparisons are the global test, the pairwise directional test, '
+            'Dunnett\'s type of test, and trend test.'
+        ),
+        'structural_zeros': (
+            'Whether to detect structurual zeros based on the `group` '
+            'variable. Refer to the ANCOM-BC2 paper for an expalanation of '
+            'the use of structural zeros.'
+        ),
+        'alpha': 'The significance level.',
+        'num_processes': (
+            'The number of processes to create that can be run in parallel.'
+        ),
+        'global_test': 'Whether to perform the global test.',
+        'pairwise_test': 'Whether to perform the pairwise test.',
+        'dunnetts_test': 'Whether to perform the Dunnet\'s type of test',
+        'trend_test': 'Whether to perfrom the trend test.'
+    },
+    output_descriptions={
+        'statistics': 'Todo...'
+    },
+    name=(
+        'ANCOM-BC2: Analysis of Composition of Microbiomes with Bias '
+        'Correction 2.'
+    ),
+    description=(
+        'Todo...'
+    ),
+    citations=[],
+    examples={}
 )
 
 plugin.visualizers.register_function(

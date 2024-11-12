@@ -57,7 +57,6 @@ def ancombc2(
     r_phyloseq_object = _create_phyloseq_object(
         table, metadata, reference_levels
     )
-    print('phyloseq object md', r_base.colnames(r_phyloseq_object.slots['sam_data']))
 
     # call ancombc2
     with conversion.localconverter(default_converter + _get_none_converter()):
@@ -121,7 +120,7 @@ def _process_formula(formula: str, metadata: qiime2.Metadata) -> str:
     renamed_tokens = []
     for token in tokens:
         if token.kind == Token.Kind.NAME:
-            r_identifier = r_base.make_names(str(token))
+            r_identifier = r_base.make_names(str(token))[0]
             renamed_tokens.append(str(r_identifier))
         elif token.kind == Token.Kind.OPERATOR:
             renamed_tokens.append(str(token))
@@ -260,7 +259,6 @@ def _create_phyloseq_object(
 
     # construct phyloseq sample (meta)data
     r_metadata_df = _convert_metadata(metadata, reference_levels)
-    print('metadata in R', r_metadata_df)
     r_phyloseq_sample_data = r_phyloseq.sample_data(r_metadata_df)
 
     # wrap table and metadata into phyloseq container object
@@ -302,7 +300,7 @@ def _convert_metadata(
     # convert column types
     for column_name in metadata.columns:
         column = metadata.get_column(column_name)
-        r_column_name = r_base.make_names(column_name)
+        r_column_name = r_base.make_names(column_name)[0]
 
         if isinstance(column, CategoricalMetadataColumn):
             r_column = r_df.rx2(r_column_name)

@@ -9,7 +9,6 @@
 import biom
 import formulaic
 from formulaic.parser.types import Token
-from numpy import c_, hypot
 import pandas as pd
 from rpy2.robjects.conversion import Converter
 import rpy2.robjects.conversion as conversion
@@ -22,9 +21,7 @@ from rpy2.rinterface import NULL as RNULL
 import qiime2
 from qiime2.metadata import NumericMetadataColumn, CategoricalMetadataColumn
 
-from q2_composition._format import (
-    ANCOMBC2ModelStatistics, ANCOMBC2StructuralZeros, ANCOMBC2OutputDirFmt
-)
+from q2_composition._format import ANCOMBC2OutputDirFmt
 
 r_base = importr('base')
 r_phyloseq = importr('phyloseq')
@@ -45,7 +42,20 @@ def ancombc2(
     alpha: float = 0.05,
     num_processes: int = 1,
 ) -> ANCOMBC2OutputDirFmt:
+    '''
+    Wraps the `ancombc2` R function from the ANCOMBC package.
 
+    Parameters
+    ----------
+    See plugin_setup.py for parameter descriptions.
+
+    Returns
+    -------
+    ANCOMBC2OutputDirFmt
+        A directory format containing the ANCOMBC2 model's per-feature
+        statistics and per-feature structural zero designations if
+        `structural_zeros` is set.
+    '''
     if structural_zeros and group is None:
         msg = (
            'The structurual zeros option was enabled but no group variable '
@@ -85,7 +95,8 @@ def ancombc2(
             verbose=True,
         )
 
-    # get data of interest from returned R list, put in output format
+    # extract data of interest from the returned R list and put it in the
+    # output format
     output_format = ANCOMBC2OutputDirFmt()
 
     model_statistics = output[output.names.index('res')]
@@ -186,7 +197,6 @@ def _handle_hyphens(
         variables.
     '''
     renamed_variables: list[str] = []
-    all_terms: list[str] = []
 
     for column in metadata.columns:
         if '-' in column and column in formula:
@@ -204,7 +214,7 @@ def _validate_formula(
 ) -> None:
     '''
     Asserts that the formula variables in `tokens` are present in the
-    metadata. Also ensures that an independent variable is not present in the
+    metadata. Also ensures that a dependent variable is not present in the
     formula.
 
     Parameters
@@ -222,12 +232,12 @@ def _validate_formula(
     ValueError
         If one of the variables in `variables` is not a column in `metadata`.
     ValueError
-        If an independent variable is specified in the formula.
+        If a dependent variable is specified in the formula.
     '''
     if '~' in tokens:
         msg = (
-            f'A "~" symbol was detected in your formula. The '
-            'independent variable should not be included in the formula.'
+            'A "~" symbol was detected in your formula. The dependent '
+            'variable should not be included in the formula.'
         )
         raise ValueError(msg)
 
@@ -274,7 +284,8 @@ def _create_phyloseq_object(
     RS4
         An R phyloseq object containing the feature table and metadata.
     '''
-    # convert feature table to R matrix with rownames=features, colnames=samples
+    # convert the feature table to an R matrix with rownames=features and
+    # colnames=samples
     table_df = table.to_dataframe(dense=True)
 
     with (ro.default_converter + pandas2ri.converter).context():
@@ -414,9 +425,9 @@ def _extract_column_reference_level(
     elif len(level_spec_fields) > 2:
         msg = (
             'More than one reference level were detected for the '
-            f'{level_specification} column-reference pair. The expected format '
-            'is "column_name::reference_level". Make sure that "::" occurs '
-            'only once in each column-reference pair.'
+            f'{level_specification} column-reference pair. The expected '
+            'format is "column_name::reference_level". Make sure that "::" '
+            'occurs only once in each column-reference pair.'
         )
         raise ValueError(msg)
 

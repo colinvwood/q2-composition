@@ -203,23 +203,23 @@ plugin.methods.register_function(
         'fixed_effects_formula': (
             'A formula that expresses how the feature absolute abundances in '
             'the feature table depend on the fixed effects of variables '
-            '(columns) in the metadata. Do not include the dependent variable. '
-            'Reference the `formula` function in the `stats` R package for a '
-            'specification of valid formulae.'
+            '(columns) in the metadata. Do not include the dependent '
+            'variable. Reference the `formula` function in the `stats` R '
+            'package for a specification of valid formulae.'
         ),
         'random_effects_formula': (
             'A formula that expresses how the feature absolute abundances in '
             'the feature table depend on the random effects of variables '
-            '(columns) in the metadata. Do not include the dependent variable. '
-            'Reference the `lmerTest` R package for a specification of valid '
-            'formulae.'
+            '(columns) in the metadata. Do not include the dependent '
+            'variable. Reference the `lmerTest` R package for a specification '
+            'of valid formulae.'
         ),
         'reference_levels': (
             'Specify reference levels for one or more categorical metadata '
             'variables (columns). The method of specification is '
-            '"column_name::column_value". E.g. "sex::female" sets the "female" '
-            'category of the "sex" variable to be the reference level. '
-            'Separate multiple specifications by spaces.'
+            '"column_name::column_value". E.g. "sex::female" sets the '
+            '"female" category of the "sex" variable to be the reference '
+            'level. Separate multiple specifications by spaces.'
         ),
         'p_adjust_method': (
             'The method used to adjust p-values. Choose from "holm", '
@@ -233,10 +233,8 @@ plugin.methods.register_function(
         ),
         'group': (
             'The name of the group variable in the metadata. The group '
-            'variable must be categorical and is required to detect structural '
-            'zeros and perform multi-group comparisons. The multi-group '
-            'comparisons are the global test, the pairwise directional test, '
-            'Dunnett\'s type of test, and trend test.'
+            'variable must be categorical and is required to detect '
+            'structural zeros.'
         ),
         'structural_zeros': (
             'Whether to detect structurual zeros based on the `group` '

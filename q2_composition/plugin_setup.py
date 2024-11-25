@@ -186,6 +186,7 @@ plugin.methods.register_function(
         ),
         'group': Str,
         'structural_zeros': Bool,
+        'asymptotic_cutoff': Bool,
         'alpha': Float % Range(
             0.0, 1.0, inclusive_start=False, inclusive_end=True
         ),
@@ -241,6 +242,14 @@ plugin.methods.register_function(
             'Whether to detect structurual zeros based on the `group` '
             'variable. Refer to the ANCOM-BC2 paper for an expalanation of '
             'the use of structural zeros.'
+        ),
+        'asymptotic_cutoff': (
+            'Whether to classify a taxon as a structural zero using its '
+            'asymptotic lower bound. Generally, it is recommended to set '
+            'this parameter when the sample size per group is relatively '
+            'large (n > 30). When this parameter is not set, a feature is '
+            'classified as a structural zero in a group if its frequency is '
+            'zero in that group. See the ANCOMBC2 publication for details.'
         ),
         'alpha': 'The significance level.',
         'num_processes': (

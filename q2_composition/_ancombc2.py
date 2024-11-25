@@ -41,6 +41,7 @@ def ancombc2(
     prevalence_cutoff: float = 0.1,
     group: str | None = None,
     structural_zeros: bool = False,
+    asymptotic_cutoff: bool = False,
     alpha: float = 0.05,
     num_processes: int = 1,
 ) -> ANCOMBC2OutputDirFmt:
@@ -79,6 +80,7 @@ def ancombc2(
             group=group,
             struc_zero=structural_zeros,
             alpha=alpha,
+            neg_lb=asymptotic_cutoff,
             n_cl=num_processes,
             verbose=True,
         )
@@ -100,7 +102,7 @@ def ancombc2(
                 structural_zeros
             )
             output_format.structural_zeros.write_data(
-                model_statistics_df, pd.DataFrame
+                structural_zeros_df, pd.DataFrame
             )
 
     return output_format

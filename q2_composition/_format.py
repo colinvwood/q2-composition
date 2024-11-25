@@ -37,3 +37,34 @@ class DataLoafPackageDirFmt(model.DirectoryFormat):
     @data_slices.set_path_maker
     def _data_slices_path_maker(self, slice_name):
         return slice_name + '.csv'
+
+
+class ANCOMBC2ModelStatistics(model.TextFileFormat):
+    '''
+    '''
+    def _validate_(self, level):
+        pass
+
+
+class ANCOMBC2StructuralZeros(model.TextFileFormat):
+    '''
+    '''
+    def _validate_(self, level):
+        pass
+
+
+class ANCOMBC2OutputDirFmt(model.DirectoryFormat):
+    '''
+    '''
+    statistics = model.File(
+        'ANCOMBC2-statistics.tsv',
+        format=ANCOMBC2ModelStatistics
+    )
+    structural_zeros = model.File(
+        'ANCOMBC2-structurual-zeros.tsv',
+        format=ANCOMBC2StructuralZeros,
+        optional=True
+    )
+
+    def _validate_(self, level):
+        pass

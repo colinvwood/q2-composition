@@ -10,6 +10,7 @@ import biom
 import formulaic
 from formulaic.parser.types import Token
 from numpy import c_, hypot
+import pandas as pd
 from rpy2.robjects.conversion import Converter
 import rpy2.robjects.conversion as conversion
 from rpy2.robjects.packages import importr
@@ -21,7 +22,9 @@ from rpy2.rinterface import NULL as RNULL
 import qiime2
 from qiime2.metadata import NumericMetadataColumn, CategoricalMetadataColumn
 
-from ._format import DataLoafPackageDirFmt
+from q2_composition._format import (
+    ANCOMBC2ModelStatistics, ANCOMBC2StructuralZeros, ANCOMBC2OutputDirFmt
+)
 
 r_base = importr('base')
 r_phyloseq = importr('phyloseq')
@@ -40,11 +43,15 @@ def ancombc2(
     structural_zeros: bool = False,
     alpha: float = 0.05,
     num_processes: int = 1,
-    global_test: bool = False,
-    pairwise_test: bool = False,
-    dunnetts_test: bool = False,
-    trend_test: bool = False,
-) -> DataLoafPackageDirFmt:
+) -> ANCOMBC2OutputDirFmt:
+
+    if structural_zeros and group is None:
+        msg = (
+           'The structurual zeros option was enabled but no group variable '
+           'was provided. Strucutural zeros are detected according to some '
+           'grouping, so a group variable must be provided.'
+        )
+        raise ValueError(msg)
 
     # process formulae
     fixed_effects_formula = _process_formula(fixed_effects_formula, metadata)
@@ -59,6 +66,9 @@ def ancombc2(
     )
 
     # call ancombc2
+    if group is not None:
+        group = r_base.make_names(group)[0]
+
     with conversion.localconverter(default_converter + _get_none_converter()):
         output = r_ancombc2.ancombc2(
             data=r_phyloseq_object,
@@ -71,13 +81,29 @@ def ancombc2(
             alpha=alpha,
             n_cl=num_processes,
             verbose=True,
-            **{'global': global_test},
-            pairwise=pairwise_test,
-            dunnet=dunnetts_test,
-            trend=trend_test
         )
 
-    print('output', type(output))
+    # get data of interest from returned R list, put in output format
+    output_format = ANCOMBC2OutputDirFmt()
+
+    model_statistics = output[output.names.index('res')]
+    with (ro.default_converter + pandas2ri.converter).context():
+        model_statistics_df = ro.conversion.get_conversion().rpy2py(
+            model_statistics
+        )
+        output_format.statistics.write_data(model_statistics_df, pd.DataFrame)
+
+    structural_zeros = output[output.names.index('zero_ind')]
+    if structural_zeros != RNULL:
+        with (ro.default_converter + pandas2ri.converter).context():
+            structural_zeros_df = ro.conversion.get_conversion().rpy2py(
+                structural_zeros
+            )
+            output_format.structural_zeros.write_data(
+                model_statistics_df, pd.DataFrame
+            )
+
+    return output_format
 
 
 def _process_formula(formula: str, metadata: qiime2.Metadata) -> str:
@@ -105,7 +131,7 @@ def _process_formula(formula: str, metadata: qiime2.Metadata) -> str:
         If an unexpected token type is encountered while parsing `formula`.
     '''
     # handle hyphens in formula
-    formula, renamed_terms = _handle_hyphens(formula)
+    formula, renamed_variables = _handle_hyphens(formula, metadata)
 
     # parse formula into tokens
     parser = formulaic.parser.parser.DefaultFormulaParser(
@@ -114,7 +140,7 @@ def _process_formula(formula: str, metadata: qiime2.Metadata) -> str:
     tokens = list(parser.get_tokens(formula))
 
     # validate formula
-    _validate_formula(tokens, metadata, renamed_terms)
+    _validate_formula(tokens, metadata, renamed_variables)
 
     # convert names
     renamed_tokens = []
@@ -122,14 +148,8 @@ def _process_formula(formula: str, metadata: qiime2.Metadata) -> str:
         if token.kind == Token.Kind.NAME:
             r_identifier = r_base.make_names(str(token))[0]
             renamed_tokens.append(str(r_identifier))
-        elif token.kind == Token.Kind.OPERATOR:
-            renamed_tokens.append(str(token))
         else:
-            msg = (
-                f'An unexpected token "{token}" of type "{token.kind}" '
-                'was encountered while parsing a formula.'
-            )
-            raise ValueError(msg)
+            renamed_tokens.append(str(token))
 
     # reconstruct formula
     # NOTE: whitespace may differ from the original formula, but this should
@@ -139,40 +159,46 @@ def _process_formula(formula: str, metadata: qiime2.Metadata) -> str:
     return processed_formula
 
 
-def _handle_hyphens(formula: str) -> tuple[str, list[str]]:
+def _handle_hyphens(
+    formula: str,
+    metadata: qiime2.Metadata
+) -> tuple[str, list[str]]:
     '''
-    Handle hyphens that may present in metadata variables included in
+    Handle hyphens that may be present in metadata variables included in
     `formula`. Replace all hyphens with periods, and track renamed variables
-    so that they can be searched against metadata properly later on.
+    so that they can be searched against metadata properly later on. Note that
+    only variables present in `metadata` are searched for and corrected in
+    `formula`.
 
     Parameters
     ----------
     formula : str
         The formula string.
+    metadata : qiime2.Metadata
+        The per-sample metadata.
 
     Returns
     -------
     tuple[str, list[str]]
-        A tuple containing the updated formula, and the list of renamed terms.
+        A tuple containing the updated formula, and the list of renamed
+        variables.
     '''
-    renamed_terms: list[str] = []
+    renamed_variables: list[str] = []
     all_terms: list[str] = []
-    for term in formula.split(' '):
-        if '-' in term and term != '-':
-            renamed_terms.append(term)
-            term = term.replace('-', '.')
 
-        all_terms.append(term)
+    for column in metadata.columns:
+        if '-' in column and column in formula:
+            renamed_variables.append(column)
+            renamed_variable = column.replace('-', '.')
+            formula = formula.replace(column, renamed_variable)
 
-    formula = ' '.join(all_terms)
-
-    return formula, renamed_terms
+    return formula, renamed_variables
 
 
 def _validate_formula(
     tokens: list[Token],
     metadata: qiime2.Metadata,
-    renamed_terms: list[str]
+    renamed_variables: list[str]
 ) -> None:
     '''
     Asserts that the formula variables in `tokens` are present in the
@@ -209,7 +235,7 @@ def _validate_formula(
         variable = str(variable)
 
         # check for original variable name if it had its hyphens replaced
-        if variable.replace('.', '-') in renamed_terms:
+        if variable.replace('.', '-') in renamed_variables:
             variable = variable.replace('.', '-')
 
         try:
@@ -301,13 +327,12 @@ def _convert_metadata(
     for column_name in metadata.columns:
         column = metadata.get_column(column_name)
         r_column_name = r_base.make_names(column_name)[0]
+        col_index = r_df.colnames.index(r_column_name)
 
         if isinstance(column, CategoricalMetadataColumn):
-            r_column = r_df.rx2(r_column_name)
-            r_column = r_base.as_factor(r_df.rx2(r_column_name))
+            r_df[col_index] = r_base.as_factor(r_df.rx2[r_column_name])
         elif isinstance(column, NumericMetadataColumn):
-            r_column = r_df.rx2(r_column_name)
-            r_column = r_base.as_numeric(r_df.rx2(r_column_name))
+            r_df[col_index] = r_base.as_numeric(r_df.rx2[r_column_name])
         else:
             msg = (
                 f'An unrecognized metadata column type ({type(column)}) was '

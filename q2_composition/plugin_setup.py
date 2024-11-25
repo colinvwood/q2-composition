@@ -17,10 +17,15 @@ from q2_types.feature_table import FeatureTable, Frequency, Composition
 from q2_types.feature_data import FeatureData
 
 import q2_composition
-from q2_composition._type import DifferentialAbundance
-from q2_composition._format import (FrictionlessCSVFileFormat,
-                                    DataPackageSchemaFileFormat,
-                                    DataLoafPackageDirFmt)
+from q2_composition._type import DifferentialAbundance, ANCOMBC2Output
+from q2_composition._format import (
+    FrictionlessCSVFileFormat,
+    DataPackageSchemaFileFormat,
+    DataLoafPackageDirFmt,
+    ANCOMBC2ModelStatistics,
+    ANCOMBC2StructuralZeros,
+    ANCOMBC2OutputDirFmt,
+)
 import q2_composition._examples as ex
 
 citations = Citations.load('citations.bib', package='q2_composition')
@@ -35,11 +40,22 @@ plugin = Plugin(
     short_description='Plugin for compositional data analysis.'
 )
 
-plugin.register_formats(FrictionlessCSVFileFormat, DataPackageSchemaFileFormat,
-                        DataLoafPackageDirFmt)
+plugin.register_formats(
+    FrictionlessCSVFileFormat,
+    DataPackageSchemaFileFormat,
+    DataLoafPackageDirFmt,
+    ANCOMBC2ModelStatistics,
+    ANCOMBC2StructuralZeros,
+    ANCOMBC2OutputDirFmt,
+)
 
-plugin.register_semantic_type_to_format(FeatureData[DifferentialAbundance],
-                                        DataLoafPackageDirFmt)
+plugin.register_semantic_type_to_format(
+    FeatureData[DifferentialAbundance], DataLoafPackageDirFmt
+)
+
+plugin.register_semantic_type_to_format(
+    FeatureData[ANCOMBC2Output], ANCOMBC2OutputDirFmt
+)
 
 plugin.methods.register_function(
     function=q2_composition.add_pseudocount,
@@ -174,13 +190,9 @@ plugin.methods.register_function(
             0.0, 1.0, inclusive_start=False, inclusive_end=True
         ),
         'num_processes': Threads,
-        'global_test': Bool,
-        'pairwise_test': Bool,
-        'dunnetts_test': Bool,
-        'trend_test': Bool
     },
     outputs=[
-        ('statistics', FeatureData[DifferentialAbundance])
+        ('statistics', FeatureData[ANCOMBC2Output])
     ],
     input_descriptions={
         'table': 'Your feature table.'
@@ -234,10 +246,6 @@ plugin.methods.register_function(
         'num_processes': (
             'The number of processes to create that can be run in parallel.'
         ),
-        'global_test': 'Whether to perform the global test.',
-        'pairwise_test': 'Whether to perform the pairwise test.',
-        'dunnetts_test': 'Whether to perform the Dunnet\'s type of test',
-        'trend_test': 'Whether to perfrom the trend test.'
     },
     output_descriptions={
         'statistics': 'Todo...'

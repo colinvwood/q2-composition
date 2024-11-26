@@ -270,7 +270,7 @@ plugin.methods.register_function(
         'Calls the `ancombc2` function of the ANCOMBC software package. See '
         'the ANCOM-BC2 publication and source code for details.'
     ),
-    citations=[],
+    citations=[citations['lin2024multigroup']],
     examples={}
 )
 

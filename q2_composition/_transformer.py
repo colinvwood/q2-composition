@@ -28,7 +28,7 @@ def _1(obj: FrictionlessCSVFileFormat) -> pd.DataFrame:
 def _2(df: pd.DataFrame) -> ANCOMBC2ModelStatistics:
     format = ANCOMBC2ModelStatistics()
     with format.open() as fh:
-        df.to_csv(fh, sep='\t')
+        df.to_csv(fh, sep='\t', index=False)
 
     return format
 
@@ -42,7 +42,7 @@ def _3(format: ANCOMBC2ModelStatistics) -> pd.DataFrame:
 def _4(df: pd.DataFrame) -> ANCOMBC2StructuralZeros:
     format = ANCOMBC2StructuralZeros()
     with format.open() as fh:
-        df.to_csv(fh, sep='\t')
+        df.to_csv(fh, sep='\t', index=False)
 
     return format
 

@@ -58,7 +58,7 @@ def ancombc2(
     '''
     if structural_zeros and group is None:
         msg = (
-           'The structurual zeros option was enabled but no group variable '
+           'The structural zeros option was enabled but no group variable '
            'was provided. Strucutural zeros are detected according to some '
            'grouping, so a group variable must be provided.'
         )
@@ -104,6 +104,7 @@ def ancombc2(
         model_statistics_df = ro.conversion.get_conversion().rpy2py(
             model_statistics
         )
+
         output_format.statistics.write_data(model_statistics_df, pd.DataFrame)
 
     structural_zeros = output[output.names.index('zero_ind')]

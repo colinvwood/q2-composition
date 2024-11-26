@@ -193,7 +193,7 @@ plugin.methods.register_function(
         'num_processes': Threads,
     },
     outputs=[
-        ('statistics', FeatureData[ANCOMBC2Output])
+        ('ancombc2-output', FeatureData[ANCOMBC2Output])
     ],
     input_descriptions={
         'table': 'Your feature table.'
@@ -247,7 +247,7 @@ plugin.methods.register_function(
             'this parameter when the sample size per group is relatively '
             'large (n > 30). When this parameter is not set, a feature is '
             'classified as a structural zero in a group if its frequency is '
-            'zero in that group. See the ANCOMBC2 publication for details.'
+            'zero in that group. See the ANCOM-BC2 publication for details.'
         ),
         'alpha': 'The significance level.',
         'num_processes': (
@@ -255,14 +255,20 @@ plugin.methods.register_function(
         ),
     },
     output_descriptions={
-        'statistics': 'Todo...'
+        'ancombc2-output': (
+            'The estimated log fold changes and their standard errors for '
+            'the variables included in the mixed effects model. Also includes '
+            'the structural zero designations if the structural zeros '
+            'parameter is passed.'
+        )
     },
     name=(
         'ANCOM-BC2: Analysis of Composition of Microbiomes with Bias '
         'Correction 2.'
     ),
     description=(
-        'Todo...'
+        'Calls the `ancombc2` function of the ANCOMBC software package. See '
+        'the ANCOM-BC2 publication and source code for details.'
     ),
     citations=[],
     examples={}

@@ -24,6 +24,7 @@ from qiime2.metadata import NumericMetadataColumn, CategoricalMetadataColumn
 from q2_composition._format import ANCOMBC2OutputDirFmt
 
 r_base = importr('base')
+r_stats = importr('stats')
 r_phyloseq = importr('phyloseq')
 r_ancombc2 = importr('ANCOMBC')
 
@@ -231,10 +232,21 @@ def _validate_formula(
     Raises
     ------
     ValueError
-        If one of the variables in `variables` is not a column in `metadata`.
+        If the formula is empty.
     ValueError
         If a dependent variable is specified in the formula.
+    ValueError
+        If one of the variables in `variables` is not a column in `metadata`.
     '''
+    if not tokens:
+        msg = (
+            'A formula was found to be empty. An empty formula, whether for '
+            'fixed effects or random effects is not valid. If you do not '
+            'wish to specify a random effects formula simply do not specify '
+            'that parameter.'
+        )
+        raise ValueError(msg)
+
     if '~' in tokens:
         msg = (
             'A "~" symbol was detected in your formula. The dependent '
@@ -387,9 +399,10 @@ def _convert_metadata(
 
             columns_seen.append(column_name)
 
-            r_column_name = r_base.make_names(column_name)
-            r_column = r_df.rx2(r_column_name)
-            r_column = r_base.relevel(r_column, ref=reference_level)
+            r_column_name = r_base.make_names(column_name)[0]
+            r_df[r_df.colnames.index(r_column_name)] = r_stats.relevel(
+                r_df.rx2[r_column_name], ref=reference_level
+            )
 
     return r_df
 

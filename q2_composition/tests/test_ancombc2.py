@@ -14,10 +14,12 @@ import unittest
 
 import qiime2
 from qiime2.metadata import NumericMetadataColumn, CategoricalMetadataColumn
+from qiime2.plugin.util import transform
 
 from q2_composition._ancombc2 import (
-    r_base, ancombc2, _process_formula, _convert_metadata
+    r_base, ancombc2, _process_formula, _convert_metadata, _split_into_slices
 )
+from q2_composition._format import ANCOMBC2SliceMapping
 
 
 class TestANCOMBC2Base(unittest.TestCase):
@@ -33,6 +35,26 @@ class TestANCOMBC2Base(unittest.TestCase):
 
 
 class TestANCOMBC2(TestANCOMBC2Base):
+    def _slices_to_single_df(
+        self, slices: ANCOMBC2SliceMapping
+    ) -> pd.DataFrame:
+        df = pd.DataFrame()
+        for slice_name, slice_df in slices.items():
+            if slice_name == 'structural_zeros':
+                continue
+
+            slice_df = slice_df.rename(
+                lambda n: n if n == 'taxon' else f'{slice_name}_{n}',
+                axis='columns'
+            )
+
+            if df.empty:
+                df = slice_df
+            else:
+                df = pd.merge(df, slice_df, on='taxon', how='inner')
+
+        return df
+
     def test_wrapped_ancombc2(self):
         '''
         Assert that ancombc2 called through qiime2 results in the same output
@@ -53,9 +75,13 @@ class TestANCOMBC2(TestANCOMBC2Base):
             structural_zeros=True
         )
 
-        model_stats = output_format.statistics.view(pd.DataFrame)
+        slices = transform(data=output_format, to_type=ANCOMBC2SliceMapping)
+        model_stats = self._slices_to_single_df(slices)
+
         struc_zeros = output_format.structural_zeros.view(pd.DataFrame)
 
+        print(ground_truth_model_stats.columns.difference(model_stats.columns))
+        print(model_stats.columns.difference(ground_truth_model_stats.columns))
         assert_frame_equal(ground_truth_model_stats, model_stats)
         assert_frame_equal(ground_truth_struc_zeros, struc_zeros)
 
@@ -231,3 +257,59 @@ class TestMetadataConversion(TestANCOMBC2Base):
                 self.assertTrue(
                     r_base.is_numeric(converted_md.rx2[r_column_name])[0]
                 )
+
+
+class TestANCOMBC2Helpers(TestANCOMBC2Base):
+    def test_split_into_slices(self):
+        df = pd.DataFrame({
+            'taxon': ['feature1', 'feature2', 'feature3'],
+            'lfc_variable.1': [0.2, 0.9, 0.1],
+            'lfc_variable.2': [-0.4, 0.0, -0.3],
+            'se_variable.1': [0.4, 0.02, 0.1],
+            'se_variable.2': [0.04, 0.0, 0.3],
+        })
+
+        exp = ANCOMBC2SliceMapping(
+            lfc=pd.DataFrame({
+                'taxon': ['feature1', 'feature2', 'feature3'],
+                'variable.1': [0.2, 0.9, 0.1],
+                'variable.2': [-0.4, 0.0, -0.3],
+            }),
+            se=pd.DataFrame({
+                'taxon': ['feature1', 'feature2', 'feature3'],
+                'variable.1': [0.4, 0.02, 0.1],
+                'variable.2': [0.04, 0.0, 0.3],
+            })
+        )
+
+        obs = _split_into_slices(df)
+
+        assert_frame_equal(exp['lfc'], obs['lfc'])
+        assert_frame_equal(exp['se'], obs['se'])
+
+    def test_split_into_slices_overlapping_prefixes(self):
+        df = pd.DataFrame({
+            'taxon': ['feature1', 'feature2', 'feature3'],
+            'p_variable.1': [0.2, 0.9, 0.1],
+            'p_variable.2': [-0.4, 0.0, -0.3],
+            'passed_ss_variable.1': [0.4, 0.02, 0.1],
+            'passed_ss_variable.2': [0.04, 0.0, 0.3],
+        })
+
+        exp = ANCOMBC2SliceMapping(
+            p=pd.DataFrame({
+                'taxon': ['feature1', 'feature2', 'feature3'],
+                'variable.1': [0.2, 0.9, 0.1],
+                'variable.2': [-0.4, 0.0, -0.3],
+            }),
+            passed_ss=pd.DataFrame({
+                'taxon': ['feature1', 'feature2', 'feature3'],
+                'variable.1': [0.4, 0.02, 0.1],
+                'variable.2': [0.04, 0.0, 0.3],
+            })
+        )
+
+        obs = _split_into_slices(df)
+
+        assert_frame_equal(exp['p'], obs['p'])
+        assert_frame_equal(exp['passed_ss'], obs['passed_ss'])

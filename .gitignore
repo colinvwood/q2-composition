@@ -74,4 +74,5 @@ output.summary.txt
 
 .DS_Store
 
-pyproject.toml
+# Version file from versioningit
+_version.py

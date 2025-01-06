@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# Copyright (c) 2016-2023, QIIME 2 development team.
+# Copyright (c) 2016-2025, QIIME 2 development team.
 #
 # Distributed under the terms of the Modified BSD License.
 #
@@ -10,9 +10,9 @@ import pandas as pd
 
 from q2_composition.plugin_setup import plugin
 from q2_composition._format import (
+    ANCOMBC2OutputDirFmt,
+    ANCOMBC2SliceMapping,
     FrictionlessCSVFileFormat,
-    ANCOMBC2ModelStatistics,
-    ANCOMBC2StructuralZeros,
 )
 
 
@@ -25,28 +25,35 @@ def _1(obj: FrictionlessCSVFileFormat) -> pd.DataFrame:
 
 
 @plugin.register_transformer
-def _2(df: pd.DataFrame) -> ANCOMBC2ModelStatistics:
-    format = ANCOMBC2ModelStatistics()
-    with format.open() as fh:
-        df.to_csv(fh, sep='\t', index=False)
+def _2(slices: ANCOMBC2SliceMapping) -> ANCOMBC2OutputDirFmt:
+    '''
+    Transforms a dataframe of ANCOMBC2 model statistics into the ANCOMBC2
+    output directory format.
+    '''
+    format = ANCOMBC2OutputDirFmt()
+    for slice_name, slice_df in slices.items():
+        format_slice = format.__getattribute__(slice_name)
+        format_slice.write_data(slice_df, pd.DataFrame)
 
     return format
 
 
 @plugin.register_transformer
-def _3(format: ANCOMBC2ModelStatistics) -> pd.DataFrame:
-    return pd.read_csv(format.path, sep='\t')
+def _3(format: ANCOMBC2OutputDirFmt) -> ANCOMBC2SliceMapping:
+    '''
+    Transforms an ANCOMBC2 output directory format into a dictionary mapping
+    slice names to dataframes containing the contents of that slice. See the
+    `ACOMBC2OutputDirFmt` definition for an explanation of the slices. An
+    additional entry for the structural zeros, with key `structural_zeros`,
+    will be present if structurual zeros are present in the format.
+    '''
+    slices = ANCOMBC2SliceMapping()
+    for slice_name in format.ALL_SLICES:
+        try:
+            format_slice = format.__getattribute__(slice_name)
+            slice_df = format_slice.view(pd.DataFrame)
+            slices[slice_name] = slice_df
+        except AttributeError:
+            pass
 
-
-@plugin.register_transformer
-def _4(df: pd.DataFrame) -> ANCOMBC2StructuralZeros:
-    format = ANCOMBC2StructuralZeros()
-    with format.open() as fh:
-        df.to_csv(fh, sep='\t', index=False)
-
-    return format
-
-
-@plugin.register_transformer
-def _5(format: ANCOMBC2StructuralZeros) -> pd.DataFrame:
-    return pd.read_csv(format.path, sep='\t')
+    return slices

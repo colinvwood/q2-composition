@@ -5,7 +5,6 @@
 #
 # The full license is in the file LICENSE, distributed with this software.
 # ----------------------------------------------------------------------------
-
 import biom
 import formulaic
 from formulaic.parser.types import Token
@@ -20,8 +19,9 @@ from rpy2.rinterface import NULL as RNULL
 
 import qiime2
 from qiime2.metadata import NumericMetadataColumn, CategoricalMetadataColumn
+from qiime2.plugin.util import transform
 
-from q2_composition._format import ANCOMBC2OutputDirFmt
+from q2_composition._format import ANCOMBC2OutputDirFmt, ANCOMBC2SliceMapping
 
 r_base = importr('base')
 r_stats = importr('stats')
@@ -96,17 +96,15 @@ def ancombc2(
             verbose=True,
         )
 
-    # extract data of interest from the returned R list and put it in the
-    # output format
-    output_format = ANCOMBC2OutputDirFmt()
-
+    # extract data of interest from the returned R list and transform to output
+    # format
     model_statistics = output[output.names.index('res')]
     with (ro.default_converter + pandas2ri.converter).context():
         model_statistics_df = ro.conversion.get_conversion().rpy2py(
             model_statistics
         )
 
-        output_format.statistics.write_data(model_statistics_df, pd.DataFrame)
+    slices = _split_into_slices(model_statistics_df)
 
     structural_zeros = output[output.names.index('zero_ind')]
     if structural_zeros != RNULL:
@@ -114,11 +112,10 @@ def ancombc2(
             structural_zeros_df = ro.conversion.get_conversion().rpy2py(
                 structural_zeros
             )
-            output_format.structural_zeros.write_data(
-                structural_zeros_df, pd.DataFrame
-            )
 
-    return output_format
+        slices['structural_zeros'] = structural_zeros_df
+
+    return transform(data=slices, to_type=ANCOMBC2OutputDirFmt)
 
 
 def _process_formula(formula: str, metadata: qiime2.Metadata) -> str:
@@ -462,3 +459,43 @@ def _get_none_converter() -> Converter:
     converter.py2rpy.register(type(None), lambda _: RNULL)
 
     return converter
+
+
+def _split_into_slices(model_statistics: pd.DataFrame) -> ANCOMBC2SliceMapping:
+    '''
+    Splits the single-table model statistics output by ANCOMBC2 into per-slice
+    dataframes. The slices are: lfc (log-fold change), se (standard error),
+    W (lfc / se), p (p-value), q (adjusted p-value), diff (whether
+    differentially abundant given q and alpha), passed_ss (whether sensitivity
+    analysis was passed).
+
+    Parameters
+    ----------
+    model_statistics : pd.DataFrame
+        A dataframe containing all of the above detailed columns for each
+        variable in the model.
+
+    Returns
+    -------
+    ANCOMBC2SliceMapping
+        A dictionary mapping the name of the slice to the slice's columns.
+    '''
+    slices = ANCOMBC2SliceMapping()
+    for slice_name in ANCOMBC2OutputDirFmt.REQUIRED_SLICES:
+        # subset model statistics to columns from slice of interest
+        slice_columns = model_statistics.columns[
+            model_statistics.columns.str.startswith(f'{slice_name}_')
+        ]
+        slice_df = model_statistics[slice_columns]
+
+        # include taxon column in each slice
+        slice_df.insert(0, 'taxon', model_statistics['taxon'])
+
+        # remove slice prefix from column names where present
+        slice_df = slice_df.rename(
+            lambda name: name.lstrip(f'{slice_name}_'), axis='columns'
+        )
+
+        slices[slice_name] = slice_df
+
+    return slices

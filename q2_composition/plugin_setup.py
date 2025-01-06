@@ -22,8 +22,6 @@ from q2_composition._format import (
     FrictionlessCSVFileFormat,
     DataPackageSchemaFileFormat,
     DataLoafPackageDirFmt,
-    ANCOMBC2ModelStatistics,
-    ANCOMBC2StructuralZeros,
     ANCOMBC2OutputDirFmt,
 )
 import q2_composition._examples as ex
@@ -44,8 +42,6 @@ plugin.register_formats(
     FrictionlessCSVFileFormat,
     DataPackageSchemaFileFormat,
     DataLoafPackageDirFmt,
-    ANCOMBC2ModelStatistics,
-    ANCOMBC2StructuralZeros,
     ANCOMBC2OutputDirFmt,
 )
 

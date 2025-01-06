@@ -5,8 +5,10 @@
 #
 # The full license is in the file LICENSE, distributed with this software.
 # ----------------------------------------------------------------------------
+import pandas as pd
 
 from qiime2.plugin import model
+from q2_types.tabular import TableJSONLFileFormat
 
 
 class FrictionlessCSVFileFormat(model.TextFileFormat):
@@ -39,38 +41,46 @@ class DataLoafPackageDirFmt(model.DirectoryFormat):
         return slice_name + '.csv'
 
 
-class ANCOMBC2ModelStatistics(model.TextFileFormat):
-    '''
-    Stores the primary output table of the ANCOMBC2 method which contains
-    log fold change estimates and their standard errors for the variables
-    included in the mixed effects model.
-    '''
-    def _validate_(self, level):
-        pass
-
-
-class ANCOMBC2StructuralZeros(model.TextFileFormat):
-    '''
-    Stores the structural zeros output table of the ANCOMBC2 method.
-    '''
-    def _validate_(self, level):
-        pass
-
-
 class ANCOMBC2OutputDirFmt(model.DirectoryFormat):
     '''
-    Stores the model statistics and structural zeros tables that are output
-    by the ANCOMBC2 method.
+    Stores the model statistics and optionally the structural zeros table=
+    output by the ANCOMBC2 method.
+
+    The slices are:
+        - lfc: log-fold change
+        - se: standard error
+        - W: lfc / se (the test statistic)
+        - p: p-value
+        - q: adjusted p-value
+        - diff: differentially abundant boolean (i.e. q < alpha)
+        - passed_ss: whether sensitivity analysis was passed
     '''
-    statistics = model.File(
-        'ANCOMBC2-statistics.tsv',
-        format=ANCOMBC2ModelStatistics
-    )
+    REQUIRED_SLICES = ('lfc', 'se', 'W', 'p', 'q', 'diff', 'passed_ss')
+    ALL_SLICES = REQUIRED_SLICES + ('structural_zeros',)
+
+    # required slices
+    lfc = model.File('lfc.jsonl', format=TableJSONLFileFormat)
+    se = model.File('se.jsonl', format=TableJSONLFileFormat)
+    W = model.File('W.jsonl', format=TableJSONLFileFormat)
+    p = model.File('p.jsonl', format=TableJSONLFileFormat)
+    q = model.File('q.jsonl', format=TableJSONLFileFormat)
+    diff = model.File('diff.jsonl', format=TableJSONLFileFormat)
+    passed_ss = model.File('passed_ss.jsonl', format=TableJSONLFileFormat)
+
+    # optional slice
     structural_zeros = model.File(
-        'ANCOMBC2-structurual-zeros.tsv',
-        format=ANCOMBC2StructuralZeros,
-        optional=True
+        'structural-zeros.jsonl', format=TableJSONLFileFormat, optional=True
     )
 
-    def _validate_(self, level):
+    def _validate_(self, level='min'):
         pass
+
+
+class ANCOMBC2SliceMapping(dict):
+    def __setitem__(self, key, value):
+        if not isinstance(key, str):
+            raise TypeError('Keys must be strings.')
+        if not isinstance(value, pd.DataFrame):
+            raise TypeError('Values must be pandas DataFrames.')
+
+        super().__setitem__(key, value)

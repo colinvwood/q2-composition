@@ -189,7 +189,7 @@ plugin.methods.register_function(
         'num_processes': Threads,
     },
     outputs=[
-        ('ancombc2-output', FeatureData[ANCOMBC2Output])
+        ('ancombc2_output', FeatureData[ANCOMBC2Output])
     ],
     input_descriptions={
         'table': 'Your feature table.'
@@ -251,7 +251,7 @@ plugin.methods.register_function(
         ),
     },
     output_descriptions={
-        'ancombc2-output': (
+        'ancombc2_output': (
             'The estimated log fold changes and their standard errors for '
             'the variables included in the mixed effects model. Also includes '
             'the structural zero designations if the structural zeros '

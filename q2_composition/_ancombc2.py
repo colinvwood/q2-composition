@@ -115,6 +115,11 @@ def ancombc2(
 
         slices['structural_zeros'] = structural_zeros_df
 
+    # rename columns to original names
+    slices = _rename_columns(slices, metadata)
+
+    # split categorical variables from levels and append reference where needed
+
     return transform(data=slices, to_type=ANCOMBC2OutputDirFmt)
 
 
@@ -497,5 +502,43 @@ def _split_into_slices(model_statistics: pd.DataFrame) -> ANCOMBC2SliceMapping:
         )
 
         slices[slice_name] = slice_df
+
+    return slices
+
+
+def _rename_columns(
+    slices: ANCOMBC2SliceMapping, metadata: qiime2.Metadata
+) -> ANCOMBC2SliceMapping:
+    '''
+    Renames any variables in the ANCOMBC2 output that were renamed to their
+    equivalent R-style identifiers back to their original names.
+
+    Parameters
+    ----------
+    slices : ANCOMBC2SliceMapping
+        The raw slices as transformed from ANCOMBC2's output.
+    metadata : qiime2.Metadata
+        The per-sample metadata containing the original variable names.
+
+    Returns
+    -------
+    ANCOMBC2SliceMapping
+        The slices with any R-style identifiers renamed.
+    '''
+    # create a mapping from r-style identifiers to original identifiers
+    r_names = {}
+    for column in metadata.columns:
+        r_name = r_base.make_names(column)[0]
+        r_names[r_name] = column
+
+    # rename any columns that contain an r-style identifier
+    for slice_df in slices.values():
+        for slice_column in slice_df.columns:
+            for r_name, name in r_names.items():
+                if slice_column.startswith(r_name):
+                    renamed = name + slice_column.lstrip(r_name)
+                    slice_df.rename(
+                        {slice_column: renamed}, axis='columns', inplace=True
+                    )
 
     return slices

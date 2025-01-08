@@ -17,7 +17,8 @@ from qiime2.metadata import NumericMetadataColumn, CategoricalMetadataColumn
 from qiime2.plugin.util import transform
 
 from q2_composition._ancombc2 import (
-    r_base, ancombc2, _process_formula, _convert_metadata, _split_into_slices
+    r_base, ancombc2, _process_formula, _convert_metadata, _split_into_slices,
+    _rename_columns,
 )
 from q2_composition._format import ANCOMBC2SliceMapping
 
@@ -61,19 +62,26 @@ class TestANCOMBC2(TestANCOMBC2Base):
         as when it is called in R. The `r-model-statistics.tsv` and
         `r-structural-zeros.tsv` files were obtained by running ANCOMBC2 in R
         using the moving pictures tutorial data.
+
+        Note: the `_rename_columns` function is patched so that column names
+        are shared between the R output and the wrapper's output.
         '''
         model_stats_fp = self.test_data_fp / 'r-model-statistics.tsv'
         ground_truth_model_stats = pd.read_csv(model_stats_fp, sep='\t')
         structural_zeros_fp = self.test_data_fp / 'r-structural-zeros.tsv'
         ground_truth_struc_zeros = pd.read_csv(structural_zeros_fp, sep='\t')
 
-        output_format = ancombc2(
-            table=self.biom_table,
-            metadata=self.metadata,
-            fixed_effects_formula='body-site + year',
-            group='body-site',
-            structural_zeros=True
-        )
+        with unittest.mock.patch(
+            'q2_composition._ancombc2._rename_columns',
+            side_effect=lambda slices, metadata: slices
+        ):
+            output_format = ancombc2(
+                table=self.biom_table,
+                metadata=self.metadata,
+                fixed_effects_formula='body-site + year',
+                group='body-site',
+                structural_zeros=True
+            )
 
         slices = transform(data=output_format, to_type=ANCOMBC2SliceMapping)
         model_stats = self._slices_to_single_df(slices)
@@ -261,6 +269,11 @@ class TestMetadataConversion(TestANCOMBC2Base):
 
 class TestANCOMBC2Helpers(TestANCOMBC2Base):
     def test_split_into_slices(self):
+        '''
+        Tests that a single model statistics table as returned by ANCOMBC2 is
+        properly converted to per-statistics slices.
+        '''
+        # non-overlapping prefixes
         df = pd.DataFrame({
             'taxon': ['feature1', 'feature2', 'feature3'],
             'lfc_variable.1': [0.2, 0.9, 0.1],
@@ -287,7 +300,7 @@ class TestANCOMBC2Helpers(TestANCOMBC2Base):
         assert_frame_equal(exp['lfc'], obs['lfc'])
         assert_frame_equal(exp['se'], obs['se'])
 
-    def test_split_into_slices_overlapping_prefixes(self):
+        # overlapping prefixes
         df = pd.DataFrame({
             'taxon': ['feature1', 'feature2', 'feature3'],
             'p_variable.1': [0.2, 0.9, 0.1],
@@ -313,3 +326,43 @@ class TestANCOMBC2Helpers(TestANCOMBC2Base):
 
         assert_frame_equal(exp['p'], obs['p'])
         assert_frame_equal(exp['passed_ss'], obs['passed_ss'])
+
+    def test_rename_columns(self):
+        '''
+        Tests that any metadata variables that were renamed to valid R-style
+        identifiers are properly renamed to the original identifers.
+        '''
+        slices = ANCOMBC2SliceMapping(
+            lfc=pd.DataFrame({
+                'taxon': ['feature1', 'feature2', 'feature3'],
+                'body.sitevariable.1': [0.2, 0.9, 0.1],
+                'body.sitevariable.2': [-0.4, 0.0, -0.3],
+                'year': [0.33, 0.2, 0.8],
+            }),
+            se=pd.DataFrame({
+                'taxon': ['feature1', 'feature2', 'feature3'],
+                'body.sitevariable.1': [0.4, 0.02, 0.1],
+                'body.sitevariable.2': [0.04, 0.0, 0.3],
+                'year': [0.33, 0.2, 0.8],
+            })
+        )
+
+        obs = _rename_columns(slices, self.metadata)
+
+        exp = ANCOMBC2SliceMapping(
+            lfc=pd.DataFrame({
+                'taxon': ['feature1', 'feature2', 'feature3'],
+                'body-sitevariable.1': [0.2, 0.9, 0.1],
+                'body-sitevariable.2': [-0.4, 0.0, -0.3],
+                'year': [0.33, 0.2, 0.8],
+            }),
+            se=pd.DataFrame({
+                'taxon': ['feature1', 'feature2', 'feature3'],
+                'body-sitevariable.1': [0.4, 0.02, 0.1],
+                'body-sitevariable.2': [0.04, 0.0, 0.3],
+                'year': [0.33, 0.2, 0.8],
+            })
+        )
+
+        assert_frame_equal(exp['lfc'], obs['lfc'])
+        assert_frame_equal(exp['se'], obs['se'])

@@ -65,7 +65,10 @@ class TestANCOMBC2(TestANCOMBC2Base):
         using the moving pictures tutorial data.
 
         Note: the `_rename_columns` function is patched so that column names
-        are shared between the R output and the wrapper's output.
+        are shared between the R output and the wrapper's output. Note also
+        that `_process_categorical_variables` does nothing in this case because
+        columns have not been renamed and are thus not detected as categorical
+        in the metadata. These methods are tested elsewhere.
         '''
         model_stats_fp = self.test_data_fp / 'r-model-statistics.tsv'
         ground_truth_model_stats = pd.read_csv(model_stats_fp, sep='\t')
@@ -89,8 +92,6 @@ class TestANCOMBC2(TestANCOMBC2Base):
 
         struc_zeros = output_format.structural_zeros.view(pd.DataFrame)
 
-        print(ground_truth_model_stats.columns.difference(model_stats.columns))
-        print(model_stats.columns.difference(ground_truth_model_stats.columns))
         assert_frame_equal(ground_truth_model_stats, model_stats)
         assert_frame_equal(ground_truth_struc_zeros, struc_zeros)
 

@@ -96,8 +96,7 @@ def ancombc2(
             verbose=True,
         )
 
-    # extract data of interest from the returned R list and transform to output
-    # format
+    # extract data of interest from the returned R list
     model_statistics = output[output.names.index('res')]
     with (ro.default_converter + pandas2ri.converter).context():
         model_statistics_df = ro.conversion.get_conversion().rpy2py(
@@ -118,7 +117,8 @@ def ancombc2(
     # rename columns to original names
     slices = _rename_columns(slices, metadata)
 
-    # split categorical variables from levels and append reference where needed
+    # split categorical variables from levels and annotate references
+    slices = _process_categorical_variables(slices, metadata)
 
     return transform(data=slices, to_type=ANCOMBC2OutputDirFmt)
 
@@ -498,7 +498,7 @@ def _split_into_slices(model_statistics: pd.DataFrame) -> ANCOMBC2SliceMapping:
 
         # remove slice prefix from column names where present
         slice_df = slice_df.rename(
-            lambda name: name.lstrip(f'{slice_name}_'), axis='columns'
+            lambda name: name.removeprefix(f'{slice_name}_'), axis='columns'
         )
 
         slices[slice_name] = slice_df
@@ -536,7 +536,7 @@ def _rename_columns(
         for slice_column in slice_df.columns:
             for r_name, name in r_names.items():
                 if slice_column.startswith(r_name):
-                    renamed = name + slice_column.lstrip(r_name)
+                    renamed = name + slice_column.removeprefix(r_name)
                     slice_df.rename(
                         {slice_column: renamed}, axis='columns', inplace=True
                     )
@@ -590,8 +590,8 @@ def _process_categorical_variables(
     )
     for slice_df in slices.values():
         for column in slice_df.columns:
-            if '::' in column:
-                variable, _ = column.split('::')
+            if _is_categorical(column, metadata):
+                variable, _ = _parse_variable_and_level(column, metadata)
                 reference_level = reference_levels[variable]
                 slice_df[column].attrs['reference'] = reference_level
 
@@ -622,8 +622,8 @@ def _is_categorical(column: str, metadata: qiime2.Metadata) -> bool:
                 metadata.get_column(md_column), CategoricalMetadataColumn
             ):
                 return True
-            else:
-                return False
+
+            return False
 
     return False
 

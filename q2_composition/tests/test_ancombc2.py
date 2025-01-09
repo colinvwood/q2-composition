@@ -18,7 +18,8 @@ from qiime2.plugin.util import transform
 
 from q2_composition._ancombc2 import (
     r_base, ancombc2, _process_formula, _convert_metadata, _split_into_slices,
-    _rename_columns,
+    _rename_columns, _is_categorical, _parse_variable_and_level,
+    _deduce_reference_levels, _process_categorical_variables
 )
 from q2_composition._format import ANCOMBC2SliceMapping
 
@@ -335,14 +336,14 @@ class TestANCOMBC2Helpers(TestANCOMBC2Base):
         slices = ANCOMBC2SliceMapping(
             lfc=pd.DataFrame({
                 'taxon': ['feature1', 'feature2', 'feature3'],
-                'body.sitevariable.1': [0.2, 0.9, 0.1],
-                'body.sitevariable.2': [-0.4, 0.0, -0.3],
+                'body.sitegut.lower': [0.2, 0.9, 0.1],
+                'body.sitegut.upper': [-0.4, 0.0, -0.3],
                 'year': [0.33, 0.2, 0.8],
             }),
             se=pd.DataFrame({
                 'taxon': ['feature1', 'feature2', 'feature3'],
-                'body.sitevariable.1': [0.4, 0.02, 0.1],
-                'body.sitevariable.2': [0.04, 0.0, 0.3],
+                'body.sitegut.lower': [0.4, 0.02, 0.1],
+                'body.sitegut.upper': [0.04, 0.0, 0.3],
                 'year': [0.33, 0.2, 0.8],
             })
         )
@@ -352,17 +353,173 @@ class TestANCOMBC2Helpers(TestANCOMBC2Base):
         exp = ANCOMBC2SliceMapping(
             lfc=pd.DataFrame({
                 'taxon': ['feature1', 'feature2', 'feature3'],
-                'body-sitevariable.1': [0.2, 0.9, 0.1],
-                'body-sitevariable.2': [-0.4, 0.0, -0.3],
+                'body-sitegut.lower': [0.2, 0.9, 0.1],
+                'body-sitegut.upper': [-0.4, 0.0, -0.3],
                 'year': [0.33, 0.2, 0.8],
             }),
             se=pd.DataFrame({
                 'taxon': ['feature1', 'feature2', 'feature3'],
-                'body-sitevariable.1': [0.4, 0.02, 0.1],
-                'body-sitevariable.2': [0.04, 0.0, 0.3],
+                'body-sitegut.lower': [0.4, 0.02, 0.1],
+                'body-sitegut.upper': [0.04, 0.0, 0.3],
                 'year': [0.33, 0.2, 0.8],
             })
         )
 
         assert_frame_equal(exp['lfc'], obs['lfc'])
         assert_frame_equal(exp['se'], obs['se'])
+
+    def test_is_categorical(self):
+        '''
+        Tests that it can be determined whether column names return by ANCOBMC2
+        in the model statistics refer to categorical variables.
+        '''
+        self.assertTrue(
+            _is_categorical('body-sitegut', self.metadata)
+        )
+        self.assertTrue(
+            _is_categorical('body-site::gut', self.metadata)
+        )
+        self.assertTrue(
+            _is_categorical('body-site::gut::upper', self.metadata)
+        )
+        self.assertTrue(
+            _is_categorical('body-site', self.metadata)
+        )
+
+        self.assertFalse(
+            _is_categorical('year', self.metadata)
+        )
+
+        # robust when one column prefix of another
+        prefix_df = pd.DataFrame({
+            'sample-id': ['s1', 's2', 's3'],
+            'body-site': ['gut', 'palm', 'tongue'],
+            'body-site-count': [2, 3, 2],
+        }).set_index('sample-id')
+        prefix_md = qiime2.Metadata(prefix_df)
+
+        self.assertTrue(
+            _is_categorical('body-site', prefix_md)
+        )
+        self.assertFalse(
+            _is_categorical('body-site-count', prefix_md)
+        )
+
+    def test_parse_variable_and_level(self):
+        '''
+        Tests that parsing the variable name and level name from a
+        concatenation of the two as returned by ANCOMBC2 (and possibly
+        reformated by _reformat_categorical_variables) works as expected.
+        '''
+        exp = ('body-site', 'level1')
+        obs = _parse_variable_and_level('body-sitelevel1', self.metadata)
+        self.assertEqual(exp, obs)
+
+        exp = ('body-site', 'level1')
+        obs = _parse_variable_and_level('body-site::level1', self.metadata)
+        self.assertEqual(exp, obs)
+
+        # robust to '::' present in variable name and level name
+        namespace_symbol_df = pd.DataFrame({
+            'sample-id': ['s1', 's2', 's3'],
+            'body::site': ['gut', 'palm', 'tongue::left'],
+        }).set_index('sample-id')
+        namespace_symbol_md = qiime2.Metadata(namespace_symbol_df)
+
+        exp = ('body::site', 'gut')
+        obs = _parse_variable_and_level('body::sitegut', namespace_symbol_md)
+        self.assertEqual(exp, obs)
+
+        exp = ('body::site', 'gut')
+        obs = _parse_variable_and_level('body::site::gut', namespace_symbol_md)
+        self.assertEqual(exp, obs)
+
+        exp = ('body::site', 'tongue::left')
+        obs = _parse_variable_and_level(
+            'body::sitetongue::left',  namespace_symbol_md
+        )
+        self.assertEqual(exp, obs)
+
+        exp = ('body::site', 'tongue::left')
+        obs = _parse_variable_and_level(
+            'body::site::tongue::left', namespace_symbol_md
+        )
+        self.assertEqual(exp, obs)
+
+    def test_deduce_reference_levels(self):
+        '''
+        Tests that reference levels of categorical variables can be detected
+        post ANCOMBC2.
+        '''
+        slice_df = pd.DataFrame({
+            'taxon': ['feature1', 'feature2', 'feature3'],
+            'body-site::gut': [0.2, 0.9, 0.1],
+            'body-site::left palm': [-0.4, 0.0, -0.3],
+            'body-site::right palm': [-0.4, 0.0, -0.3],
+            'year': [0.33, 0.2, 0.8],
+        })
+
+        exp = {
+            'body-site': 'tongue'
+        }
+
+        obs = _deduce_reference_levels(slice_df, self.metadata)
+
+        self.assertEqual(exp, obs)
+
+    def test_process_categorical_variables(self):
+        '''
+        Tests that columns in the model statistics slices that refer to
+        categorical variables have been properly renamed and annotated with
+        their reference level.
+        '''
+        slices = ANCOMBC2SliceMapping(
+            lfc=pd.DataFrame({
+                'taxon': ['feature1', 'feature2', 'feature3'],
+                'body-sitegut': [0.2, 0.9, 0.1],
+                'body-sitetongue': [-0.4, 0.0, -0.3],
+                'body-siteright palm': [-0.4, 0.9, -0.1],
+                'year': [0.33, 0.2, 0.8],
+            }),
+            se=pd.DataFrame({
+                'taxon': ['feature1', 'feature2', 'feature3'],
+                'body-sitegut': [0.4, 0.02, 0.1],
+                'body-sitetongue': [0.04, 0.0, 0.3],
+                'body-siteright palm': [0.4, 0.4, 0.2],
+                'year': [0.33, 0.2, 0.8],
+            })
+        )
+
+        exp = ANCOMBC2SliceMapping(
+            lfc=pd.DataFrame({
+                'taxon': ['feature1', 'feature2', 'feature3'],
+                'body-site::gut': [0.2, 0.9, 0.1],
+                'body-site::tongue': [-0.4, 0.0, -0.3],
+                'body-site::right palm': [-0.4, 0.9, -0.1],
+                'year': [0.33, 0.2, 0.8],
+            }),
+            se=pd.DataFrame({
+                'taxon': ['feature1', 'feature2', 'feature3'],
+                'body-site::gut': [0.4, 0.02, 0.1],
+                'body-site::tongue': [0.04, 0.0, 0.3],
+                'body-site::right palm': [0.4, 0.4, 0.2],
+                'year': [0.33, 0.2, 0.8],
+            })
+        )
+        for slice in ('lfc', 'se'):
+            for level in ('gut', 'tongue', 'right palm'):
+                column = f'body-site::{level}'
+                exp[slice][column].attrs['reference'] = 'left palm'
+
+        obs = _process_categorical_variables(slices, self.metadata)
+
+        # tests variable, level separation
+        assert_frame_equal(exp['lfc'], obs['lfc'])
+        assert_frame_equal(exp['se'], obs['se'])
+
+        # tests reference annotation
+        for slice in exp:
+            for column in exp[slice].columns:
+                self.assertEqual(
+                    exp[slice][column].attrs, obs[slice][column].attrs
+                )

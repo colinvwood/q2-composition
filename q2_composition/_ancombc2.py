@@ -542,3 +542,198 @@ def _rename_columns(
                     )
 
     return slices
+
+
+def _process_categorical_variables(
+    slices: ANCOMBC2SliceMapping, metadata: qiime2.Metadata
+) -> ANCOMBC2SliceMapping:
+    '''
+    Renames categorical variable columns in each slice in order to make the
+    distinction between a metadata variable and it's given level clear, by
+    separating the two as follows: 'some-variable::some-level'.
+
+    Also documents which reference level a given variable level is in
+    comparison to, by detecting figuring out which reference level was chosen
+    (either by the user or ANCOMBC2) and setting the reference as an attribute
+    on the corresponding dataframe column.
+
+    Parameters
+    ----------
+    slices : ANCOMBC2SliceMapping
+        The raw slices as transformed from the ANCOMBC2 method's output.
+    metadata : qiime2.Metadata
+        The per-sample metadata that contains information about each variable
+        present in the ANCOMBC2 output.
+
+    Returns
+    -------
+    ANCOMBC2SliceMapping
+        The slices with any categorical variable columns renamed and annotated
+        with their reference levels as explained above.
+    '''
+    # restructure categorical variable columns into 'variable::level' format
+    for slice_df in slices.values():
+        for slice_column in slice_df.columns:
+            if _is_categorical(slice_column, metadata):
+                variable, level = _parse_variable_and_level(
+                    slice_column, metadata
+                )
+                slice_df.rename(
+                    {slice_column: variable + '::' + level},
+                    axis='columns',
+                    inplace=True
+                )
+
+    # deduce reference level of each categorical variable and annotate columns
+    reference_levels = _deduce_reference_levels(
+        next(iter(slices.values())), metadata
+    )
+    for slice_df in slices.values():
+        for column in slice_df.columns:
+            if '::' in column:
+                variable, _ = column.split('::')
+                reference_level = reference_levels[variable]
+                slice_df[column].attrs['reference'] = reference_level
+
+    return slices
+
+
+def _is_categorical(column: str, metadata: qiime2.Metadata) -> bool:
+    '''
+    Determines whether `column` refers to a categorical variable.
+
+    Parameters
+    ----------
+    column : str
+        The column name as returned by ANCOMBC2. If in reference to a
+        categorical column then a level will be appended to the variable name.
+    metadata : qiime2.Metadata
+        The per-sample metadata.
+
+    Returns
+    -------
+    bool
+        Whether `column` refers to a categorical variable.
+    '''
+    # reverse sort to handle md columns that are prefixes of other md columns
+    for md_column in sorted(list(metadata.columns), reverse=True):
+        if column.startswith(md_column):
+            if isinstance(
+                metadata.get_column(md_column), CategoricalMetadataColumn
+            ):
+                return True
+            else:
+                return False
+
+    return False
+
+
+def _parse_variable_and_level(
+    column: str, metadata: qiime2.Metadata
+) -> tuple[str, str]:
+    '''
+    Parses `column` into its variable name and level name components. Assumes
+    that `column` refers to a categorical variable.
+
+    Parameters
+    ----------
+    column : str
+        The model statistics column name that is a concatenation of a variable
+        name and a level name.
+    metadata : qiime2.Metadata
+        The per-sample metadata.
+
+    Returns
+    -------
+    tuple[str, str]
+        The variable name and the level name.
+
+    Raises
+    ------
+    ValueError
+        If `column` does not refer to categorical variable.
+    ValueError
+        If the categorical variable
+    '''
+    # reverse sort to handle md columns that are prefixes of other md columns
+    for md_column in sorted(metadata.columns, reverse=True):
+        if column.startswith(md_column):
+            if not isinstance(
+                metadata.get_column(md_column), CategoricalMetadataColumn
+            ):
+                msg = (
+                    f'The {column} column does not refer to a categorical '
+                    'variable.'
+                )
+                raise ValueError(msg)
+
+            variable = md_column
+            if column[len(variable):len(variable) + 2] == '::':
+                level = column[len(variable) + 2:]
+            else:
+                level = column[len(variable):]
+
+            return variable, level
+
+    msg = (
+        f'The categorical variable referenced by {column} was not found in '
+        'the metadata.'
+    )
+    raise ValueError(msg)
+
+
+def _deduce_reference_levels(
+    slice_df: pd.DataFrame, metadata: qiime2.Metadata
+) -> dict[str, str]:
+    '''
+    Determines which reference level was selected for each categorical
+    variable in `slice_df`. Only one slice is needed because each slice
+    contains the same variables.
+
+    Note that we could be more informed by passing any reference levels
+    specified by the user into this function, however, because the user is not
+    required to specify a reference level for each (or any) categorical
+    variable in the model we must still in some circumstances empircally
+    determine which levels were set as reference by ANCOMBC2. So for
+    simplicity's sake we just do so for all variables.
+
+    Parameters
+    ---------
+    slice_df : pd.DataFrame
+        A slice of ANCOMBC2 output.
+    metadata : qiime2.Metadata
+        The per-sample metadata, used to establish the set of all levels for
+        each categorical variable.
+
+    Returns
+    -------
+    dict[str, str]
+        A mapping from variable to its reference level.
+    '''
+    reference_levels_map = {}
+    for column in slice_df.columns:
+        # a column is categorical if has been processed into the
+        # 'variable::level' format
+        if _is_categorical(column, metadata):
+            variable, _ = _parse_variable_and_level(column, metadata)
+
+            if variable in reference_levels_map:
+                continue
+
+            # find all levels presents in the slice for this variable; the
+            # remaining unseen level is the reference level
+            non_reference_levels = {
+                 _parse_variable_and_level(c, metadata)[1]
+                 for c in slice_df.columns if variable in c
+            }
+
+            md_column = metadata.get_column(variable)
+            all_levels = set(md_column.to_series().value_counts().index)
+
+            reference_levels = all_levels - non_reference_levels
+            assert len(reference_levels) == 1
+            reference_level, = reference_levels
+
+            reference_levels_map[variable] = reference_level
+
+    return reference_levels_map

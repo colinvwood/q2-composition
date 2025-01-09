@@ -19,7 +19,8 @@ from qiime2.plugin.util import transform
 from q2_composition._ancombc2 import (
     r_base, ancombc2, _process_formula, _convert_metadata, _split_into_slices,
     _rename_columns, _is_categorical, _parse_variable_and_level,
-    _deduce_reference_levels, _process_categorical_variables
+    _deduce_reference_levels, _process_categorical_variables,
+    _process_structural_zeros,
 )
 from q2_composition._format import ANCOMBC2SliceMapping
 
@@ -64,11 +65,12 @@ class TestANCOMBC2(TestANCOMBC2Base):
         `r-structural-zeros.tsv` files were obtained by running ANCOMBC2 in R
         using the moving pictures tutorial data.
 
-        Note: the `_rename_columns` function is patched so that column names
-        are shared between the R output and the wrapper's output. Note also
-        that `_process_categorical_variables` does nothing in this case because
-        columns have not been renamed and are thus not detected as categorical
-        in the metadata. These methods are tested elsewhere.
+        Note: the `_rename_columns`  and `_process_structural_zeros` functions
+        are patched so that column names are shared between the R output and
+        the wrapper's output. Note also that `_process_categorical_variables`
+        does nothing in this case because columns have not been renamed and are
+        thus not detected as categorical in the metadata. These methods are
+        tested elsewhere.
         '''
         model_stats_fp = self.test_data_fp / 'r-model-statistics.tsv'
         ground_truth_model_stats = pd.read_csv(model_stats_fp, sep='\t')
@@ -78,6 +80,9 @@ class TestANCOMBC2(TestANCOMBC2Base):
         with unittest.mock.patch(
             'q2_composition._ancombc2._rename_columns',
             side_effect=lambda slices, metadata: slices
+        ), unittest.mock.patch(
+            'q2_composition._ancombc2._process_structural_zeros',
+            side_effect=lambda structural_zeros: structural_zeros
         ):
             output_format = ancombc2(
                 table=self.biom_table,
@@ -524,3 +529,30 @@ class TestANCOMBC2Helpers(TestANCOMBC2Base):
                 self.assertEqual(
                     exp[slice][column].attrs, obs[slice][column].attrs
                 )
+
+    def test_process_structural_zeros(self):
+        '''
+        Tests that the structural zeros table returned by ANCOMBC2 has its
+        column names properly reformatted.
+        '''
+        structural_zeros = pd.DataFrame({
+            'taxon': ['feature1', 'feature2', 'feature3'],
+            'structural_zero (body.site = gut)': ['TRUE', 'FALSE', 'FALSE'],
+            'structural_zero (body.site = right palm)': [
+                'TRUE', 'TRUE', 'TRUE'
+            ],
+            'structural_zero (reported.antibiotic.usage = Yes)': [
+                'FALSE', 'TRUE', 'TRUE'
+            ],
+        })
+
+        exp = pd.DataFrame({
+            'taxon': ['feature1', 'feature2', 'feature3'],
+            'body.sitegut': ['TRUE', 'FALSE', 'FALSE'],
+            'body.siteright palm': ['TRUE', 'TRUE', 'TRUE'],
+            'reported.antibiotic.usageYes': ['FALSE', 'TRUE', 'TRUE'],
+        })
+
+        obs = _process_structural_zeros(structural_zeros)
+
+        assert_frame_equal(exp, obs)

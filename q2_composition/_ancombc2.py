@@ -112,6 +112,7 @@ def ancombc2(
                 structural_zeros
             )
 
+        structural_zeros_df = _process_structural_zeros(structural_zeros_df)
         slices['structural_zeros'] = structural_zeros_df
 
     # rename columns to original names
@@ -585,9 +586,8 @@ def _process_categorical_variables(
                 )
 
     # deduce reference level of each categorical variable and annotate columns
-    reference_levels = _deduce_reference_levels(
-        next(iter(slices.values())), metadata
-    )
+    # any slice will do except for structural zeros
+    reference_levels = _deduce_reference_levels(slices['lfc'], metadata)
     for slice_df in slices.values():
         for column in slice_df.columns:
             if _is_categorical(column, metadata):
@@ -737,3 +737,42 @@ def _deduce_reference_levels(
             reference_levels_map[variable] = reference_level
 
     return reference_levels_map
+
+
+def _process_structural_zeros(
+    structural_zeros_df: pd.DataFrame
+) -> pd.DataFrame:
+    '''
+    Reformats the column names in the structural zeros output in a similiar
+    fashion to how column names are reformated during the slice splitting
+    of the model statistics.
+
+    Incoming column names look like:
+        strcutural_zero (some-variable-name = some-level-name)
+
+    and are reformatted to:
+        some-variable-namesome-level-name
+
+    This concatenation is meant to model what ANCOMBC2 does with the model
+    statistics columns.
+
+    Note that only categorical columns are present in the structural zeros
+    output.
+
+    Parameters
+    ----------
+    structural_zeros_df : pd.DataFrame
+        The raw structural zeros table as returned by ANCOMBC2.
+
+    Returns
+    -------
+    pd.DataFrame
+        The structural zeros table with columns renamed.
+    '''
+    def _rename(column: str) -> str:
+        column = column.removeprefix('structural_zero ')
+        column = column.removeprefix('(').removesuffix(')')
+        column = column.replace(' = ', '')
+        return column
+
+    return structural_zeros_df.rename(lambda c: _rename(c), axis='columns')

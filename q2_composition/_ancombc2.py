@@ -8,6 +8,7 @@
 import biom
 import formulaic
 from formulaic.parser.types import Token
+import logging
 import pandas as pd
 from rpy2.robjects.conversion import Converter
 import rpy2.robjects.conversion as conversion
@@ -16,6 +17,7 @@ from rpy2.robjects.methods import RS4
 from rpy2.robjects import pandas2ri, default_converter
 import rpy2.robjects as ro
 from rpy2.rinterface import NULL as RNULL
+from rpy2.rinterface_lib.callbacks import logger as rpy2_logger
 
 import qiime2
 from qiime2.metadata import NumericMetadataColumn, CategoricalMetadataColumn
@@ -27,6 +29,8 @@ r_base = importr('base')
 r_stats = importr('stats')
 r_phyloseq = importr('phyloseq')
 r_ancombc2 = importr('ANCOMBC')
+
+rpy2_logger.setLevel(logging.ERROR)
 
 
 def ancombc2(

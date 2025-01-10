@@ -477,7 +477,7 @@ class TestANCOMBC2Helpers(TestANCOMBC2Base):
         '''
         Tests that columns in the model statistics slices that refer to
         categorical variables have been properly renamed and annotated with
-        their reference level.
+        their variable, level, and reference level.
         '''
         slices = ANCOMBC2SliceMapping(
             lfc=pd.DataFrame({
@@ -515,6 +515,8 @@ class TestANCOMBC2Helpers(TestANCOMBC2Base):
         for slice in ('lfc', 'se'):
             for level in ('gut', 'tongue', 'right palm'):
                 column = f'body-site::{level}'
+                exp[slice][column].attrs['variable'] = 'body-site'
+                exp[slice][column].attrs['level'] = level
                 exp[slice][column].attrs['reference'] = 'left palm'
 
         obs = _process_categorical_variables(slices, self.metadata)

@@ -557,10 +557,8 @@ def _process_categorical_variables(
     distinction between a metadata variable and it's given level clear, by
     separating the two as follows: 'some-variable::some-level'.
 
-    Also documents which reference level a given variable level is in
-    comparison to, by detecting figuring out which reference level was chosen
-    (either by the user or ANCOMBC2) and setting the reference as an attribute
-    on the corresponding dataframe column.
+    Each column is also annotated with its variable, level, and reference
+    level.
 
     Parameters
     ----------
@@ -595,8 +593,10 @@ def _process_categorical_variables(
     for slice_df in slices.values():
         for column in slice_df.columns:
             if _is_categorical(column, metadata):
-                variable, _ = _parse_variable_and_level(column, metadata)
+                variable, level = _parse_variable_and_level(column, metadata)
                 reference_level = reference_levels[variable]
+                slice_df[column].attrs['variable'] = variable
+                slice_df[column].attrs['level'] = level
                 slice_df[column].attrs['reference'] = reference_level
 
     return slices
